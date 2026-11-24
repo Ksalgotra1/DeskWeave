@@ -1,5 +1,7 @@
 package com.deskweave.app;
 
+import com.deskweave.config.AppConfig;
+import com.deskweave.config.AppLogger;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -10,10 +12,15 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.util.logging.Logger;
+
 /**
  * Primary JavaFX Application lifecycle entry point for DeskWeave.
  */
 public class DeskWeaveApp extends Application {
+
+    private AppConfig config;
+    private Logger logger;
 
     public static void main(String[] args) {
         launch(args);
@@ -21,7 +28,11 @@ public class DeskWeaveApp extends Application {
 
     @Override
     public void init() {
-        // Phase 1+ will initialize AppConfig, AppLogger, and DatabaseManager here.
+        config = AppConfig.loadDefault();
+        AppLogger.configure(config.getLogFilePath());
+        logger = AppLogger.getLogger(DeskWeaveApp.class);
+        logger.info("Initialized DeskWeave configuration and logger (grace="
+                + config.getExpiryGraceMinutes() + "m)");
     }
 
     @Override
@@ -36,7 +47,7 @@ public class DeskWeaveApp extends Application {
         header.setPadding(new Insets(20, 24, 16, 24));
         header.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label statusLabel = new Label("Phase 0 Bootstrap Ready — Java "
+        Label statusLabel = new Label("Phase 1 Ready — Java "
                 + Runtime.version().feature() + " + OpenJFX " + System.getProperty("javafx.version", "21"));
         statusLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #1e293b;");
 
@@ -54,6 +65,10 @@ public class DeskWeaveApp extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
 
+        if (logger != null) {
+            logger.info("Primary JavaFX stage shown");
+        }
+
         if (getParameters().getRaw().contains("--smoke-test")) {
             Platform.runLater(Platform::exit);
         }
@@ -61,6 +76,9 @@ public class DeskWeaveApp extends Application {
 
     @Override
     public void stop() {
-        // Phase 3+ will shut down background executors and flush loggers here.
+        if (logger != null) {
+            logger.info("Shutting down DeskWeave application");
+        }
+        AppLogger.shutdown();
     }
 }
