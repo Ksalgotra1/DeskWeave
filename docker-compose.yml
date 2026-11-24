@@ -1,0 +1,15 @@
+services:
+  deskweave-db:
+    image: postgres:16-alpine
+    container_name: deskweave-db
+    environment:
+      POSTGRES_DB: deskweave
+      POSTGRES_USER: deskweave
+      POSTGRES_PASSWORD: deskweave
+    ports:
+      - "5432:5432"
+    volumes:
+      - deskweave_pgdata:/var/lib/postgresql/data
+
+volumes:
+  deskweave_pgdata:
