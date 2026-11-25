@@ -176,9 +176,42 @@ public class PostgresBookingDao implements BookingDao {
                 + " WHERE status = 'CONFIRMED' AND (booking_date < ? OR (booking_date = ? AND start_time <= ?)) "
                 + "ORDER BY booking_date ASC, start_time ASC";
         String updateSql = "UPDATE bookings SET status = 'EXPIRED' WHERE booking_id = ? AND status = 'CONFIRMED'";
+        return transitionBookingsInBatch(
+                selectSql,
+                updateSql,
+                cutoffDateTime,
+                BookingStatus.EXPIRED,
+                "EXPIRED",
+                "Auto-expired unclaimed booking for slot ",
+                systemActorUserId);
+    }
 
-        Date cutoffDate = Date.valueOf(cutoffDateTime.toLocalDate());
-        Time cutoffTime = Time.valueOf(cutoffDateTime.toLocalTime());
+    @Override
+    public List<Booking> completeFinishedBookings(LocalDateTime referenceNow, int systemActorUserId) {
+        Objects.requireNonNull(referenceNow, "referenceNow must not be null");
+        String selectSql = SELECT_COLS
+                + " WHERE status = 'CHECKED_IN' AND (booking_date < ? OR (booking_date = ? AND end_time <= ?)) "
+                + "ORDER BY booking_date ASC, end_time ASC";
+        String updateSql = "UPDATE bookings SET status = 'COMPLETED' WHERE booking_id = ? AND status = 'CHECKED_IN'";
+        return transitionBookingsInBatch(
+                selectSql,
+                updateSql,
+                referenceNow,
+                BookingStatus.COMPLETED,
+                "COMPLETED",
+                "Auto-completed finished booking for slot ",
+                systemActorUserId);
+    }
+
+    private List<Booking> transitionBookingsInBatch(String selectSql,
+                                                    String updateSql,
+                                                    LocalDateTime cutoff,
+                                                    BookingStatus targetStatus,
+                                                    String auditAction,
+                                                    String auditPrefix,
+                                                    int systemActorUserId) {
+        Date cutoffDate = Date.valueOf(cutoff.toLocalDate());
+        Time cutoffTime = Time.valueOf(cutoff.toLocalTime());
 
         return db.inTransaction(conn -> {
             List<Booking> candidates = new ArrayList<>();
@@ -193,7 +226,7 @@ public class PostgresBookingDao implements BookingDao {
                 }
             }
 
-            List<Booking> expired = new ArrayList<>();
+            List<Booking> transitioned = new ArrayList<>();
             try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
                 for (Booking candidate : candidates) {
                     updatePs.setInt(1, candidate.getBookingId());
@@ -204,24 +237,24 @@ public class PostgresBookingDao implements BookingDao {
                                 candidate.getWorkspaceId(),
                                 candidate.getSlot(),
                                 candidate.getAttendeeCount(),
-                                BookingStatus.EXPIRED,
+                                targetStatus,
                                 candidate.getCheckedInAt().orElse(null),
                                 candidate.getNotes(),
                                 candidate.getCreatedAt()
                         );
-                        expired.add(updatedBooking);
+                        transitioned.add(updatedBooking);
                         auditLogDao.insert(conn, new AuditLogEntry(
                                 0,
                                 candidate.getBookingId(),
                                 systemActorUserId,
-                                "EXPIRED",
-                                "Auto-expired unclaimed booking for slot " + candidate.getSlot(),
+                                auditAction,
+                                auditPrefix + candidate.getSlot(),
                                 LocalDateTime.now()
                         ));
                     }
                 }
             }
-            return expired;
+            return transitioned;
         });
     }
 

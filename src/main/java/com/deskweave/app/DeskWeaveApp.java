@@ -63,6 +63,7 @@ public class DeskWeaveApp extends Application {
         primaryStage.setMinWidth(960);
         primaryStage.setMinHeight(640);
         primaryStage.setScene(scene);
+        UiAlerts.setOwner(primaryStage);
 
         showLoginView();
         primaryStage.show();

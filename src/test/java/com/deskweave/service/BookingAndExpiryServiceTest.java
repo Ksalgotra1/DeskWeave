@@ -149,4 +149,32 @@ class BookingAndExpiryServiceTest {
         assertEquals(1, offsetExpired.size());
         assertEquals(2, expiryService.getRecentExpiryFeed().size());
     }
+
+    @Test
+    void sweepUpgradesFinishedCheckedInBookingsToCompletedWhileLeavingCancelledUntouched() throws Exception {
+        LocalDate today = LocalDate.now();
+        Booking checkedInBooking = bookingService.createBooking(
+                alice.getUserId(), desk1.getId(),
+                TimeSlot.of(today, LocalTime.of(9, 0), LocalTime.of(11, 0)),
+                1, "Checked in session");
+        bookingService.checkIn(checkedInBooking.getBookingId(), alice, LocalDateTime.of(today, LocalTime.of(9, 5)));
+
+        Booking cancelledBooking = bookingService.createBooking(
+                bob.getUserId(), desk1.getId(),
+                TimeSlot.of(today, LocalTime.of(12, 0), LocalTime.of(13, 0)),
+                1, "Cancelled session");
+        bookingService.cancelBooking(cancelledBooking.getBookingId(), bob);
+
+        // At 10:30, checked-in booking is still active -> remains CHECKED_IN
+        expiryService.runExpirySweepAt(LocalDateTime.of(today, LocalTime.of(10, 30)), admin.getUserId());
+        assertEquals(BookingStatus.CHECKED_IN,
+                bookingService.findBookingsForUser(alice.getUserId()).get(0).getStatus());
+
+        // At 11:05 (past end_time 11:00), checked-in booking upgrades to COMPLETED; cancelled stays CANCELLED
+        expiryService.runExpirySweepAt(LocalDateTime.of(today, LocalTime.of(11, 5)), admin.getUserId());
+        assertEquals(BookingStatus.COMPLETED,
+                bookingService.findBookingsForUser(alice.getUserId()).get(0).getStatus());
+        assertEquals(BookingStatus.CANCELLED,
+                bookingService.findBookingsForUser(bob.getUserId()).get(0).getStatus());
+    }
 }

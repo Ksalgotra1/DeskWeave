@@ -25,6 +25,8 @@ public interface BookingDao extends GenericDao<Booking, Integer> {
 
     List<Booking> expireOverdueBookings(LocalDateTime cutoffDateTime, int systemActorUserId);
 
+    List<Booking> completeFinishedBookings(LocalDateTime referenceNow, int systemActorUserId);
+
     boolean hasOverlappingActiveBooking(int workspaceId, TimeSlot slot);
 
     List<Booking> findByUserId(int userId);

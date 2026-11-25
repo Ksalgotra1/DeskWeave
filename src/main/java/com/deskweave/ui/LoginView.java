@@ -138,6 +138,7 @@ public class LoginView extends StackPane {
 
     private void openRegisterDialog() {
         Dialog<User> dialog = new Dialog<>();
+        UiAlerts.configureDialog(dialog);
         dialog.setTitle("Register New Employee");
         dialog.setHeaderText("Create a DeskWeave Employee Account");
 

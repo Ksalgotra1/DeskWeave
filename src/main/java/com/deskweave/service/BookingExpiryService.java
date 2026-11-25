@@ -51,28 +51,35 @@ public class BookingExpiryService {
     }
 
     /**
-     * Expires all {@code CONFIRMED} bookings whose {@code startTime + graceMinutes <= referenceNow}.
+     * Expires overdue {@code CONFIRMED} bookings and marks finished {@code CHECKED_IN} bookings as {@code COMPLETED}.
      */
     public List<Booking> runExpirySweepAt(LocalDateTime referenceNow, int systemActorUserId) {
         Objects.requireNonNull(referenceNow, "referenceNow must not be null");
         LocalDateTime cutoff = referenceNow.minusMinutes(config.getExpiryGraceMinutes());
         List<Booking> expired = bookingDao.expireOverdueBookings(cutoff, systemActorUserId);
+        List<Booking> completed = bookingDao.completeFinishedBookings(referenceNow, systemActorUserId);
 
-        if (!expired.isEmpty()) {
-            String timeStamp = referenceNow.format(FEED_TIME_FMT);
-            synchronized (recentExpiryFeed) {
-                for (Booking booking : expired) {
-                    String msg = "[" + timeStamp + "] Expired booking #" + booking.getBookingId()
-                            + " (workspace #" + booking.getWorkspaceId() + ", " + booking.getSlot() + ")";
-                    recentExpiryFeed.addFirst(msg);
-                    while (recentExpiryFeed.size() > MAX_FEED_ENTRIES) {
-                        recentExpiryFeed.removeLast();
-                    }
-                    LOGGER.info(msg);
+        String timeStamp = referenceNow.format(FEED_TIME_FMT);
+        recordFeedEntries(expired, timeStamp, "Expired");
+        recordFeedEntries(completed, timeStamp, "Completed");
+        return expired;
+    }
+
+    private void recordFeedEntries(List<Booking> bookings, String timeStamp, String verb) {
+        if (bookings.isEmpty()) {
+            return;
+        }
+        synchronized (recentExpiryFeed) {
+            for (Booking booking : bookings) {
+                String msg = "[" + timeStamp + "] " + verb + " booking #" + booking.getBookingId()
+                        + " (workspace #" + booking.getWorkspaceId() + ", " + booking.getSlot() + ")";
+                recentExpiryFeed.addFirst(msg);
+                while (recentExpiryFeed.size() > MAX_FEED_ENTRIES) {
+                    recentExpiryFeed.removeLast();
                 }
+                LOGGER.info(msg);
             }
         }
-        return expired;
     }
 
     public List<String> getRecentExpiryFeed() {
