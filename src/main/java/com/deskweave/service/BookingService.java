@@ -189,6 +189,10 @@ public class BookingService {
         return bookingDao.findByDateRange(from, to);
     }
 
+    public List<Booking> findActiveForWorkspaceOnDate(int workspaceId, LocalDate date) {
+        return bookingDao.findActiveByWorkspaceAndDate(workspaceId, date);
+    }
+
     private synchronized Optional<Booking> promoteNextWaitlistMatch(int workspaceId) {
         Iterator<WaitlistEntry> iterator = waitlist.iterator();
         while (iterator.hasNext()) {

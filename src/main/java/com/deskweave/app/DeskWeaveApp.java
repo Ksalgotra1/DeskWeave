@@ -2,16 +2,25 @@ package com.deskweave.app;
 
 import com.deskweave.config.AppConfig;
 import com.deskweave.config.AppLogger;
+import com.deskweave.model.Booking;
+import com.deskweave.model.User;
+import com.deskweave.ui.LoginView;
+import com.deskweave.ui.MainShellView;
+import com.deskweave.ui.UiAlerts;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Objects;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -19,8 +28,13 @@ import java.util.logging.Logger;
  */
 public class DeskWeaveApp extends Application {
 
+    private static final DateTimeFormatter SWEEP_TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
+
     private AppConfig config;
+    private AppContext appContext;
     private Logger logger;
+    private StackPane rootContainer;
+    private Timeline expiryTimeline;
 
     public static void main(String[] args) {
         launch(args);
@@ -31,51 +45,87 @@ public class DeskWeaveApp extends Application {
         config = AppConfig.loadDefault();
         AppLogger.configure(config.getLogFilePath());
         logger = AppLogger.getLogger(DeskWeaveApp.class);
-        logger.info("Initialized DeskWeave configuration and logger (grace="
+        appContext = new AppContext(config);
+        logger.info("Initialized DeskWeave configuration, logger, and AppContext (grace="
                 + config.getExpiryGraceMinutes() + "m)");
     }
 
     @Override
     public void start(Stage primaryStage) {
-        Label titleLabel = new Label("DeskWeave");
-        titleLabel.setStyle("-fx-font-size: 28px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
+        rootContainer = new StackPane();
+        Scene scene = new Scene(rootContainer, 1160, 740);
+        String stylesheet = Objects.requireNonNull(
+                DeskWeaveApp.class.getResource("/styles/deskweave.css"),
+                "Missing /styles/deskweave.css").toExternalForm();
+        scene.getStylesheets().add(stylesheet);
 
-        Label subtitleLabel = new Label("Smart Workspace Booking & Capacity Planning Platform");
-        subtitleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #475569;");
-
-        VBox header = new VBox(4, titleLabel, subtitleLabel);
-        header.setPadding(new Insets(20, 24, 16, 24));
-        header.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
-
-        Label statusLabel = new Label("Phase 1 Ready — Java "
-                + Runtime.version().feature() + " + OpenJFX " + System.getProperty("javafx.version", "21"));
-        statusLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #1e293b;");
-
-        VBox centerBox = new VBox(10, statusLabel);
-        centerBox.setAlignment(Pos.CENTER);
-        centerBox.setPadding(new Insets(24));
-
-        BorderPane root = new BorderPane();
-        root.setTop(header);
-        root.setCenter(centerBox);
-        root.setStyle("-fx-background-color: #ffffff;");
-
-        Scene scene = new Scene(root, 840, 520);
         primaryStage.setTitle("DeskWeave — Smart Workspace Booking & Capacity Planning");
+        primaryStage.setMinWidth(960);
+        primaryStage.setMinHeight(640);
         primaryStage.setScene(scene);
+
+        showLoginView();
         primaryStage.show();
 
+        boolean smokeTest = getParameters().getRaw().contains("--smoke-test");
         if (logger != null) {
-            logger.info("Primary JavaFX stage shown");
+            logger.info("Primary JavaFX stage shown (smokeTest=" + smokeTest + ")");
         }
 
-        if (getParameters().getRaw().contains("--smoke-test")) {
+        if (smokeTest) {
             Platform.runLater(Platform::exit);
+        } else if (!appContext.getDatabaseManager().testConnection()) {
+            UiAlerts.showError(
+                    "PostgreSQL Connection Unavailable",
+                    "Could not connect to PostgreSQL at " + config.getDbUrl() + ".\n\n"
+                            + "Start PostgreSQL 16 (brew services start postgresql@16 or docker compose up -d) "
+                            + "and apply sql/schema.sql + sql/seed.sql.");
+        }
+    }
+
+    private void showLoginView() {
+        stopExpiryTimeline();
+        rootContainer.getChildren().setAll(new LoginView(appContext, this::handleLoginSuccess));
+    }
+
+    private void handleLoginSuccess(User user) {
+        MainShellView shell = new MainShellView(appContext, user, this::showLoginView);
+        rootContainer.getChildren().setAll(shell);
+        startExpiryTimeline(user, shell);
+    }
+
+    private void startExpiryTimeline(User user, MainShellView shell) {
+        stopExpiryTimeline();
+        expiryTimeline = new Timeline(new KeyFrame(Duration.seconds(30), e ->
+                appContext.getBackgroundExecutor().submit(() -> {
+                    try {
+                        List<Booking> expired = appContext.getExpiryService().runExpirySweep(user.getUserId());
+                        String ts = LocalTime.now().format(SWEEP_TIME_FMT);
+                        Platform.runLater(() -> shell.recordExpirySweep(expired.size(), ts));
+                    } catch (Exception ex) {
+                        if (logger != null) {
+                            logger.log(Level.WARNING, "Background expiry sweep failed", ex);
+                        }
+                    }
+                })
+        ));
+        expiryTimeline.setCycleCount(Timeline.INDEFINITE);
+        expiryTimeline.play();
+    }
+
+    private void stopExpiryTimeline() {
+        if (expiryTimeline != null) {
+            expiryTimeline.stop();
+            expiryTimeline = null;
         }
     }
 
     @Override
     public void stop() {
+        stopExpiryTimeline();
+        if (appContext != null) {
+            appContext.shutdown();
+        }
         if (logger != null) {
             logger.info("Shutting down DeskWeave application");
         }
