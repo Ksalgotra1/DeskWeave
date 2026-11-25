@@ -1,0 +1,27 @@
+request_id,requester_name,workspace_type,floor,attendees,date,start_time,end_time,notes
+REQ-01,Alice Verma,ROOM,2,6,2026-11-26,08:00,09:00,Morning standup
+REQ-02,Bob Nair,ROOM,2,4,2026-11-26,08:00,09:00,Design triage
+REQ-03,Carol Patel,ROOM,2,5,2026-11-26,09:00,10:00,Sprint planning
+REQ-04,Dave Kulkarni,ROOM,2,4,2026-11-26,09:00,10:00,QA test review
+REQ-05,Eve Menon,ROOM,2,8,2026-11-26,09:00,10:00,Architecture sync
+REQ-06,Farhan Ali,ROOM,2,3,2026-11-26,09:00,10:00,Security check-in
+REQ-07,Alice Verma,ROOM,2,8,2026-11-26,10:00,12:00,Platform roadmap
+REQ-08,Bob Nair,ROOM,2,5,2026-11-26,10:00,11:30,Figma handoff
+REQ-09,Carol Patel,ROOM,2,6,2026-11-26,10:00,12:00,ML model review
+REQ-10,Dave Kulkarni,ROOM,2,4,2026-11-26,10:15,11:45,Release readiness
+REQ-11,Eve Menon,ROOM,2,5,2026-11-26,10:30,11:30,Vendor demo
+REQ-12,Farhan Ali,ROOM,2,3,2026-11-26,10:30,12:00,Incident retro
+REQ-13,Alice Verma,ROOM,2,4,2026-11-26,12:00,13:30,Database tuning
+REQ-14,Bob Nair,ROOM,2,5,2026-11-26,12:00,13:30,Customer interview
+REQ-15,Carol Patel,ROOM,2,6,2026-11-26,12:00,13:30,Data governance
+REQ-16,Dave Kulkarni,ROOM,2,4,2026-11-26,13:30,15:30,Automation workshop
+REQ-17,Eve Menon,ROOM,2,7,2026-11-26,13:30,15:00,Hiring debrief
+REQ-18,Farhan Ali,ROOM,2,5,2026-11-26,13:30,15:30,Compliance audit
+REQ-19,Alice Verma,ROOM,2,4,2026-11-26,14:00,15:30,API guild
+REQ-20,Bob Nair,ROOM,2,3,2026-11-26,14:00,15:00,User research
+REQ-21,Carol Patel,ROOM,2,6,2026-11-26,15:30,17:30,Analytics sprint demo
+REQ-22,Dave Kulkarni,ROOM,2,4,2026-11-26,15:30,17:00,Regression triage
+REQ-23,Eve Menon,ROOM,2,8,2026-11-26,15:30,17:30,Quarterly budget
+REQ-24,Farhan Ali,ROOM,2,5,2026-11-26,16:00,17:30,Cloud migration
+REQ-25,Alice Verma,ROOM,2,4,2026-11-26,17:30,19:00,Evening wrap-up
+REQ-26,Bob Nair,ROOM,2,3,2026-11-26,17:30,19:00,Design backlog
