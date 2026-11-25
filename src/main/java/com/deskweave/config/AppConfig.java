@@ -18,6 +18,7 @@ public final class AppConfig {
     private final String dbUrl;
     private final String dbUser;
     private final String dbPassword;
+    private final int checkInEarlyMinutes;
     private final int expiryGraceMinutes;
     private final LocalTime officeOpen;
     private final LocalTime officeClose;
@@ -31,6 +32,7 @@ public final class AppConfig {
         this.dbUrl = requireNonBlank(props.getProperty("db.url", "jdbc:postgresql://localhost:5432/deskweave"), "db.url");
         this.dbUser = requireNonBlank(props.getProperty("db.user", "deskweave"), "db.user");
         this.dbPassword = Objects.requireNonNull(props.getProperty("db.password", "deskweave"), "db.password");
+        this.checkInEarlyMinutes = parseNonNegativeInt(props.getProperty("checkin.early.minutes", "15"), "checkin.early.minutes");
         this.expiryGraceMinutes = parsePositiveInt(props.getProperty("expiry.grace.minutes", "15"), "expiry.grace.minutes");
         this.officeOpen = LocalTime.parse(props.getProperty("office.open", "08:00").trim());
         this.officeClose = LocalTime.parse(props.getProperty("office.close", "20:00").trim());
@@ -74,6 +76,14 @@ public final class AppConfig {
         return value.trim();
     }
 
+    private static int parseNonNegativeInt(String raw, String key) {
+        int parsed = Integer.parseInt(raw.trim());
+        if (parsed < 0) {
+            throw new IllegalArgumentException("Configuration key '" + key + "' must be >= 0");
+        }
+        return parsed;
+    }
+
     private static int parsePositiveInt(String raw, String key) {
         int parsed = Integer.parseInt(raw.trim());
         if (parsed <= 0) {
@@ -100,6 +110,10 @@ public final class AppConfig {
 
     public String getDbPassword() {
         return dbPassword;
+    }
+
+    public int getCheckInEarlyMinutes() {
+        return checkInEarlyMinutes;
     }
 
     public int getExpiryGraceMinutes() {

@@ -99,7 +99,7 @@ public class BookingService {
     }
 
     /**
-     * Marks a confirmed booking as checked in if the actor is authorized and within the grace window.
+     * Marks a confirmed booking as checked in if the actor is authorized and inside {@code [start - early, start + grace]}.
      */
     public Booking checkIn(int bookingId, User actor, LocalDateTime now) throws DeskWeaveException {
         Objects.requireNonNull(actor, "actor must not be null");
@@ -116,11 +116,22 @@ public class BookingService {
                     + " is currently " + booking.getStatus());
         }
 
-        LocalDateTime graceDeadline = LocalDateTime.of(booking.getSlot().getDate(), booking.getSlot().getStartTime())
-                .plusMinutes(config.getExpiryGraceMinutes());
-        if (now.isAfter(graceDeadline)) {
+        LocalDateTime slotStart = LocalDateTime.of(booking.getSlot().getDate(), booking.getSlot().getStartTime());
+        LocalDateTime earliestCheckIn = slotStart.minusMinutes(config.getCheckInEarlyMinutes());
+        LocalDateTime latestCheckIn = slotStart.plusMinutes(config.getExpiryGraceMinutes());
+
+        if (now.isBefore(earliestCheckIn)) {
             throw new InvalidTimeSlotException(
-                    "Check-in grace window closed at " + graceDeadline.toLocalTime(),
+                    "Too early to check in. Check-in opens at " + earliestCheckIn.toLocalTime()
+                            + " on " + earliestCheckIn.toLocalDate()
+                            + " (" + config.getCheckInEarlyMinutes() + " min before start).",
+                    booking.getSlot().getStartTime(),
+                    booking.getSlot().getEndTime());
+        }
+        if (now.isAfter(latestCheckIn)) {
+            throw new InvalidTimeSlotException(
+                    "Check-in grace window closed at " + latestCheckIn.toLocalTime()
+                            + " (" + config.getExpiryGraceMinutes() + " min after start).",
                     booking.getSlot().getStartTime(),
                     booking.getSlot().getEndTime());
         }
@@ -139,10 +150,23 @@ public class BookingService {
     }
 
     /**
-     * Cancels an active booking and promotes the first compatible entry from the FIFO waitlist.
+     * Cancels an active booking (pre-start for employees; anytime with override audit for admins)
+     * and promotes the first compatible entry from the FIFO waitlist.
      */
     public Optional<Booking> cancelBooking(int bookingId, User actor) throws DeskWeaveException {
+        return cancelBooking(bookingId, actor, LocalDateTime.now(), null);
+    }
+
+    public Optional<Booking> cancelBooking(int bookingId, User actor, String reason) throws DeskWeaveException {
+        return cancelBooking(bookingId, actor, LocalDateTime.now(), reason);
+    }
+
+    public Optional<Booking> cancelBooking(int bookingId,
+                                           User actor,
+                                           LocalDateTime now,
+                                           String reason) throws DeskWeaveException {
         Objects.requireNonNull(actor, "actor must not be null");
+        Objects.requireNonNull(now, "now must not be null");
         Booking booking = bookingDao.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
 
@@ -154,15 +178,38 @@ public class BookingService {
                     + " with status " + booking.getStatus());
         }
 
+        LocalDateTime slotStart = LocalDateTime.of(booking.getSlot().getDate(), booking.getSlot().getStartTime());
+        if (!actor.isAdmin()) {
+            if (booking.getStatus() == BookingStatus.CHECKED_IN) {
+                throw new DeskWeaveException(
+                        "Cannot cancel a booking after check-in. Ask a Facilities Admin for an override.");
+            }
+            if (!now.isBefore(slotStart)) {
+                throw new InvalidTimeSlotException(
+                        "Cancellation closed after start time (" + slotStart.toLocalTime()
+                                + "). Ask a Facilities Admin for an override.",
+                        booking.getSlot().getStartTime(),
+                        booking.getSlot().getEndTime());
+            }
+        }
+
+        boolean isAdminOverride = actor.isAdmin() && (booking.getUserId() != actor.getUserId()
+                || booking.getStatus() == BookingStatus.CHECKED_IN
+                || !now.isBefore(slotStart));
+        String auditAction = isAdminOverride ? "ADMIN_CANCELLED" : "CANCELLED";
+        String cleanReason = (reason == null || reason.isBlank()) ? "" : " — Reason: " + reason.trim();
+        String details = (isAdminOverride ? "Admin override cancel by " : "Cancelled by ")
+                + actor.getFullName() + cleanReason;
+
         bookingDao.updateStatusWithAudit(
                 bookingId,
                 BookingStatus.CANCELLED,
                 null,
                 actor.getUserId(),
-                "CANCELLED",
-                "Cancelled by " + actor.getFullName());
+                auditAction,
+                details);
 
-        LOGGER.info("Cancelled booking#" + bookingId + " by " + actor.getEmail());
+        LOGGER.info(auditAction + " booking#" + bookingId + " by " + actor.getEmail());
         return promoteNextWaitlistMatch(booking.getWorkspaceId());
     }
 

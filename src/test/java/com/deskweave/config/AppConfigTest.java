@@ -19,6 +19,7 @@ class AppConfigTest {
         assertEquals("jdbc:postgresql://localhost:5432/deskweave", config.getDbUrl());
         assertEquals("deskweave", config.getDbUser());
         assertEquals("deskweave", config.getDbPassword());
+        assertEquals(15, config.getCheckInEarlyMinutes());
         assertEquals(15, config.getExpiryGraceMinutes());
         assertEquals(LocalTime.of(8, 0), config.getOfficeOpen());
         assertEquals(LocalTime.of(20, 0), config.getOfficeClose());

@@ -33,6 +33,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -373,6 +374,10 @@ public class EmployeeBookingView extends VBox implements RefreshableView {
         }
         if (date.isBefore(LocalDate.now())) {
             showFormError("Cannot book a workspace on a past date.");
+            return;
+        }
+        if (!LocalDateTime.of(date, end).isAfter(LocalDateTime.now())) {
+            showFormError("Selected time slot has already ended.");
             return;
         }
 

@@ -20,6 +20,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -234,7 +235,10 @@ public class MyBookingsView extends VBox implements RefreshableView {
             return;
         }
         checkInBtn.setDisable(selected.getStatus() != BookingStatus.CONFIRMED);
-        cancelBtn.setDisable(!selected.getStatus().isActiveSlot());
+        boolean canCancel = currentUser.isAdmin()
+                ? selected.getStatus().isActiveSlot()
+                : selected.getStatus() == BookingStatus.CONFIRMED;
+        cancelBtn.setDisable(!canCancel);
     }
 
     private void handleCheckIn() {
@@ -258,16 +262,31 @@ public class MyBookingsView extends VBox implements RefreshableView {
         if (selected == null) {
             return;
         }
-        boolean confirmed = UiAlerts.confirm(
-                "Cancel Booking",
-                "Cancel booking #" + selected.getBookingId() + " (" + selected.getSlot() + ")?",
-                "This slot will be released immediately and offered to the waitlist if applicable.");
-        if (!confirmed) {
-            return;
+        String reason = null;
+        if (currentUser.isAdmin() && selected.getStatus() == BookingStatus.CHECKED_IN) {
+            TextInputDialog reasonDialog = new TextInputDialog("Facilities override");
+            UiAlerts.configureDialog(reasonDialog);
+            reasonDialog.setTitle("Admin Override Cancel");
+            reasonDialog.setHeaderText("Cancel checked-in booking #" + selected.getBookingId()
+                    + " (" + selected.getSlot() + ")?");
+            reasonDialog.setContentText("Audit reason:");
+            Optional<String> entered = reasonDialog.showAndWait();
+            if (entered.isEmpty()) {
+                return;
+            }
+            reason = entered.get();
+        } else {
+            boolean confirmed = UiAlerts.confirm(
+                    "Cancel Booking",
+                    "Cancel booking #" + selected.getBookingId() + " (" + selected.getSlot() + ")?",
+                    "This slot will be released immediately and offered to the waitlist if applicable.");
+            if (!confirmed) {
+                return;
+            }
         }
         try {
             Optional<Booking> promoted = context.getBookingService()
-                    .cancelBooking(selected.getBookingId(), currentUser);
+                    .cancelBooking(selected.getBookingId(), currentUser, reason);
             refreshData();
             if (promoted.isPresent()) {
                 Booking next = promoted.get();

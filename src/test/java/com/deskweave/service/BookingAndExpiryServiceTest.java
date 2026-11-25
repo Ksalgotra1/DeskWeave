@@ -106,21 +106,34 @@ class BookingAndExpiryServiceTest {
                 bob.getUserId(), bob.getFullName(), desk1.getId(), validSlot, 1, "Waiting"));
         assertEquals(1, bookingService.getWaitlistSnapshot().size());
 
+        // Too-early check-in fails (09:00 - 15m = 08:45; 08:40 is too early)
+        assertThrows(InvalidTimeSlotException.class, () -> bookingService.checkIn(
+                aliceBooking.getBookingId(), alice, LocalDateTime.of(day, LocalTime.of(8, 40))));
+
         // Past-grace check-in fails (09:00 + 15m = 09:15; 09:20 is too late)
         assertThrows(InvalidTimeSlotException.class, () -> bookingService.checkIn(
                 aliceBooking.getBookingId(), alice, LocalDateTime.of(day, LocalTime.of(9, 20))));
 
-        // Alice cancels -> Bob is auto-promoted from LinkedList waitlist!
-        Optional<Booking> promoted = bookingService.cancelBooking(aliceBooking.getBookingId(), alice);
+        // Alice cancels pre-start -> Bob is auto-promoted from LinkedList waitlist!
+        Optional<Booking> promoted = bookingService.cancelBooking(
+                aliceBooking.getBookingId(), alice, LocalDateTime.of(day, LocalTime.of(8, 0)), null);
         assertTrue(promoted.isPresent());
         assertEquals(bob.getUserId(), promoted.get().getUserId());
         assertEquals(BookingStatus.CONFIRMED, promoted.get().getStatus());
         assertTrue(bookingService.getWaitlistSnapshot().isEmpty());
 
-        // Bob checks in within grace window
+        // Bob checks in within early window (08:50 is within [08:45, 09:15])
         Booking checkedIn = bookingService.checkIn(
-                promoted.get().getBookingId(), bob, LocalDateTime.of(day, LocalTime.of(9, 5)));
+                promoted.get().getBookingId(), bob, LocalDateTime.of(day, LocalTime.of(8, 50)));
         assertEquals(BookingStatus.CHECKED_IN, checkedIn.getStatus());
+
+        // Bob cannot self-cancel after check-in; Admin can override with audit reason
+        assertThrows(DeskWeaveException.class, () -> bookingService.cancelBooking(
+                checkedIn.getBookingId(), bob, LocalDateTime.of(day, LocalTime.of(8, 55)), null));
+        bookingService.cancelBooking(
+                checkedIn.getBookingId(), admin, LocalDateTime.of(day, LocalTime.of(9, 10)), "Room maintenance");
+        assertEquals(BookingStatus.CANCELLED,
+                bookingService.findBookingsForUser(bob.getUserId()).get(0).getStatus());
     }
 
     @Test
@@ -163,7 +176,16 @@ class BookingAndExpiryServiceTest {
                 bob.getUserId(), desk1.getId(),
                 TimeSlot.of(today, LocalTime.of(12, 0), LocalTime.of(13, 0)),
                 1, "Cancelled session");
-        bookingService.cancelBooking(cancelledBooking.getBookingId(), bob);
+        bookingService.cancelBooking(
+                cancelledBooking.getBookingId(), bob, LocalDateTime.of(today, LocalTime.of(11, 30)), null);
+
+        // Employee cannot cancel after start time
+        Booking startedBooking = bookingService.createBooking(
+                bob.getUserId(), desk1.getId(),
+                TimeSlot.of(today, LocalTime.of(14, 0), LocalTime.of(15, 0)),
+                1, "Started session");
+        assertThrows(InvalidTimeSlotException.class, () -> bookingService.cancelBooking(
+                startedBooking.getBookingId(), bob, LocalDateTime.of(today, LocalTime.of(14, 5)), null));
 
         // At 10:30, checked-in booking is still active -> remains CHECKED_IN
         expiryService.runExpirySweepAt(LocalDateTime.of(today, LocalTime.of(10, 30)), admin.getUserId());
